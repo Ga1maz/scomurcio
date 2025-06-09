@@ -107,7 +107,7 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BME280 Monitor</title>
+    <title>BME280 Монитор</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/moment"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment"></script>
@@ -126,21 +126,21 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
     </style>
 </head>
 <body>
-    <h1>BME280 Environmental Monitor</h1>
+    <h1>BME280 Монитор окружающей среды</h1>
     
     <div class="current-data">
         <h2>Current Readings</h2>
         <div class="data-grid">
             <div class="data-card">
-                <h3>Temperature</h3>
+                <h3>Температура</h3>
                 <div class="data-value" id="current-temp">-- °C</div>
             </div>
             <div class="data-card">
-                <h3>Humidity</h3>
+                <h3>Влажность</h3>
                 <div class="data-value" id="current-humidity">-- %</div>
             </div>
             <div class="data-card">
-                <h3>Pressure</h3>
+                <h3>Давление</h3>
                 <div class="data-value" id="current-pressure">-- hPa</div>
             </div>
         </div>
@@ -148,19 +148,19 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
 
     <div class="dashboard">
         <div>
-            <h2>Temperature History</h2>
+            <h2>История температуры</h2>
             <div class="chart-container">
                 <canvas id="tempChart"></canvas>
             </div>
         </div>
         <div>
-            <h2>Humidity History</h2>
+            <h2>История влажности</h2>
             <div class="chart-container">
                 <canvas id="humidityChart"></canvas>
             </div>
         </div>
         <div>
-            <h2>Pressure History</h2>
+            <h2>История давления</h2>
             <div class="chart-container">
                 <canvas id="pressureChart"></canvas>
             </div>
@@ -171,10 +171,10 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
     <table id="readings-table">
         <thead>
             <tr>
-                <th>Time</th>
-                <th>Temperature (°C)</th>
-                <th>Humidity (%)</th>
-                <th>Pressure (hPa)</th>
+                <th>Время</th>
+                <th>Температура (°C)</th>
+                <th>Влажность (%)	</th>
+                <th>Давление (гПа)</th>
             </tr>
         </thead>
         <tbody id="table-body">
@@ -188,9 +188,9 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
         const maxHistory = 50;
 
         // Chart instances
-        const tempChart = createChart('tempChart', 'Temperature', '°C', 'rgba(255, 99, 132, 0.2)', 'rgb(255, 99, 132)');
-        const humidityChart = createChart('humidityChart', 'Humidity', '%', 'rgba(54, 162, 235, 0.2)', 'rgb(54, 162, 235)');
-        const pressureChart = createChart('pressureChart', 'Pressure', 'hPa', 'rgba(75, 192, 192, 0.2)', 'rgb(75, 192, 192)');
+        const tempChart = createChart('tempChart', 'Температрура', '°C', 'rgba(255, 99, 132, 0.2)', 'rgb(255, 99, 132)');
+        const humidityChart = createChart('humidityChart', 'Влажность', '%', 'rgba(54, 162, 235, 0.2)', 'rgb(54, 162, 235)');
+        const pressureChart = createChart('pressureChart', 'Давление', 'hPa', 'rgba(75, 192, 192, 0.2)', 'rgb(75, 192, 192)');
 
         function createChart(canvasId, label, unit, bgColor, borderColor) {
             const ctx = document.getElementById(canvasId).getContext('2d');
