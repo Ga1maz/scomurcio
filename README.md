@@ -38,6 +38,7 @@
 ![Шаг установки Ubuntu Server](images/Screen_3.png)  
 ![Шаг установки Ubuntu Server](images/Screen_5.png)  
 ![Шаг установки Ubuntu Server](images/Screen_6.png)  
+УСТАНОВИТЕ ЛОГИН И ПАРОЛЬ server server для удобства
 ![Шаг установки Ubuntu Server](images/Screen_7.png)  
 ![Шаг установки Ubuntu Server](images/Screen_8.png)
 ![Шаг установки Ubuntu Server](images/Screen_9.png)  
