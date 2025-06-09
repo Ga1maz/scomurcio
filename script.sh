@@ -129,7 +129,7 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
     <h1>BME280 Монитор окружающей среды</h1>
     
     <div class="current-data">
-        <h2>Current Readings</h2>
+        <h2>Текущие показатели(раз 5 сек)</h2>
         <div class="data-grid">
             <div class="data-card">
                 <h3>Температура</h3>
@@ -167,7 +167,7 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
         </div>
     </div>
 
-    <h2>Recent Readings</h2>
+    <h2>Последние данные</h2>
     <table id="readings-table">
         <thead>
             <tr>
