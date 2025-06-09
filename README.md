@@ -44,7 +44,6 @@
 ![Шаг установки Ubuntu Server](images/Screen_9.png)  
 ![Шаг установки Ubuntu Server](images/Screen_10.png)  
 ![Шаг установки Ubuntu Server](images/Screen_11.png)  
-![Шаг установки Ubuntu Server](images/Screen_12.png)  
 
 ---
 
@@ -82,7 +81,7 @@ bash <(curl https://raw.githubusercontent.com/Ga1maz/scomurcio/refs/heads/main/s
 
 📷 Пример схемы подключения:
 
-![Схема подключения](images/Screen_13.png)
+![Шаг установки Ubuntu Server](images/Screen_12.png)  
 
 ---
 
