@@ -198,7 +198,7 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
                 type: 'line',
                 data: {
                     datasets: [{
-                        label: ${label} (${unit}),
+                        label: `${label} (${unit})`,
                         backgroundColor: bgColor,
                         borderColor: borderColor,
                         borderWidth: 1,
@@ -225,9 +225,9 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
         }
 
         function updateCurrentReadings(data) {
-            document.getElementById('current-temp').textContent = ${data.temperature} °C;
-            document.getElementById('current-humidity').textContent = ${data.humidity} %;
-            document.getElementById('current-pressure').textContent = ${data.pressure} hPa;
+            document.getElementById('current-temp').textContent = `${data.temperature} °C`;
+            document.getElementById('current-humidity').textContent = `${data.humidity} %`;
+            document.getElementById('current-pressure').textContent = `${data.pressure} hPa`;
         }
 
         function updateCharts(data) {
