@@ -1,97 +1,168 @@
 #!/bin/bash
 
-# Проверка на запуск от root
-if [ "$(id -u)" -ne 0 ]; then
-    echo -e "🚫 \e[1;31mОшибка: Этот скрипт должен запускаться с правами root!\e[0m" >&2
-    exit 1
-fi
+# 1. Создаем виртуальное окружение
+python3 -m venv venv
+source venv/bin/activate
 
-# Функция для отображения меню
-show_menu() {
-    clear
-    echo -e "\e[1;36m"
-    echo "  ____   ____ ___  __  __   _   _ ____   ____ ___  ___  "
-    echo " / ___| / ___/ _ \|  \/  | | | | |  _ \ / ___|_ _|/ _ \ "
-    echo " \___ \| |  | | | | |\/| | | | | | |_) | |    | | | | | |"
-    echo "  ___) | |__| |_| | |  | | | |_| |  _ <| |___ | | | |_| |"
-    echo " |____/ \____\___/|_|  |_|  \___/|_| \_\\____|___|\___/ "
-    echo -e "\e[1;33m             🚀 СКРИПТ ОТ GA1MAZ.RU \e[0m"
-    echo ""
+# 2. Устанавливаем зависимости
+pip install flask pandas matplotlib numpy plotly smbus2 mpu6050-raspberrypi bme280
 
-    echo -e "\e[1;34m📊 Информация о системе:\e[0m"
-    echo -e "🖥️  \e[1;33mIP-адрес:\e[0m \e[0;32m$(hostname -I 2>/dev/null | awk '{print $1}' || echo "Недоступно")\e[0m"
-    echo -e "🧠 \e[1;33mОЗУ:\e[0m \e[0;32m$(free -h | awk '/Mem/{print $3 "/" $2}')\e[0m"
-    echo -e "💾 \e[1;33mДиск:\e[0m \e[0;32m$(df -h / | awk 'NR==2{print $3 "/" $2}')\e[0m"
-    echo ""
+# 3. Проверка наличия датчиков
+python3 <<EOF
+from smbus2 import SMBus
+import sys
 
-    echo -e "\e[1;34m👑 Владелец:\e[0m \e[0;35mga1maz.ru\e[0m"
-    echo -e "\e[1;34m📜 Лицензия:\e[0m \e[0;35mMIT\e[0m"
-    echo ""
+bus = SMBus(1)
+def device_exists(address):
+    try:
+        bus.read_byte(address)
+        return True
+    except:
+        return False
 
-    echo -e "\e[1;34m🔍 Выберите действие:\e[0m"
-    echo -e "\e[1;32m1). 🌡️ BME280 (Температура/Влажность/Давление)\e[0m"
-    echo -e "\e[1;32m2). 🎮 MPU6050 (Акселерометр/Гироскоп)\e[0m"
-    echo -e "\e[1;32m3). 🔄 Энкодер (Ротационный энкодер)\e[0m"
-    echo -e "\e[1;32m4). 🗑️ Удалить файлы\e[0m"
-    echo -e "\e[1;31m0). ❌ Выход\e[0m"
-    echo ""
-}
+bme280_found = device_exists(0x76) or device_exists(0x77)
+mpu6050_found = device_exists(0x68)
 
-# Основной цикл
-while true; do
-    show_menu
+if not (bme280_found or mpu6050_found):
+    print("❌ Датчики BME280 и MPU6050 не найдены. Прекращаем запуск.")
+    sys.exit(1)
+EOF
 
-    # Ждём ввод с нажатием Enter
-    read -p "Введите номер пункта (0-4) и нажмите Enter: " choice
-    echo ""
+# 4. Создаем структуру
+mkdir -p app/templates
 
-    case "$choice" in
-        1)
-            echo -e "\e[1;34mВыбран BME280 (Температура/Влажность/Давление)\e[0m"
-            echo -e "\e[1;33mЧтение данных...\e[0m"
-            echo -e "Температура: \e[1;32m25.4°C\e[0m"
-            echo -e "Влажность: \e[1;32m45%\e[0m"
-            echo -e "Давление: \e[1;32m1013.25 hPa\e[0m"
-            read -n 1 -s -p "Нажмите любую клавишу для продолжения..."
-            ;;
-        2)
-            echo -e "\e[1;34mВыбран MPU6050 (Акселерометр/Гироскоп)\e[0m"
-            echo -e "\e[1;33mЧтение данных...\e[0m"
-            echo -e "Ускорение X: \e[1;32m0.12 g\e[0m"
-            echo -e "Ускорение Y: \e[1;32m0.05 g\e[0m"
-            echo -e "Ускорение Z: \e[1;32m1.02 g\e[0m"
-            read -n 1 -s -p "Нажмите любую клавишу для продолжения..."
-            ;;
-        3)
-            echo -e "\e[1;34mВыбран Энкодер (Ротационный энкодер)\e[0m"
-            echo -e "\e[1;33mЧтение данных...\e[0m"
-            echo -e "Положение: \e[1;32m127 шагов\e[0m"
-            echo -e "Направление: \e[1;32mПо часовой\e[0m"
-            read -n 1 -s -p "Нажмите любую клавишу для продолжения..."
-            ;;
-        4)
-            echo -e "\e[1;34m🗑️ Удаление файлов\e[0m"
-            read -p "Введите путь к файлам для удаления: " filepath
-            
-            if [ -e "$filepath" ]; then
-                read -p "Вы действительно хотите удалить '$filepath'? [y/N]: " confirmation
-                if [[ "$confirmation" =~ ^[yYдД]$ ]]; then
-                    rm -rf "$filepath" && echo -e "\e[1;32mФайлы успешно удалены!\e[0m" || echo -e "\e[1;31mОшибка при удалении!\e[0m"
-                else
-                    echo -e "\e[1;33mУдаление отменено\e[0m"
-                fi
-            else
-                echo -e "\e[1;31mОшибка: Указанный путь не существует!\e[0m"
-            fi
-            read -n 1 -s -p "Нажмите любую клавишу для продолжения..."
-            ;;
-        0)
-            echo -e "\e[1;34mВыход из программы...\e[0m"
-            exit 0
-            ;;
-        *)
-            echo -e "\e[1;31mОшибка: Неверный выбор! Введите число от 0 до 4.\e[0m"
-            sleep 1
-            ;;
-    esac
-done
+# 5. Создаем Flask-приложение
+cat > app/app.py <<EOF
+from flask import Flask, render_template
+import pandas as pd
+import plotly.graph_objs as go
+import numpy as np
+
+app = Flask(__name__)
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+@app.route("/bme280")
+def bme280():
+    # Подставьте сюда реальные данные с BME280
+    data = pd.DataFrame({
+        'Time': pd.date_range(end=pd.Timestamp.now(), periods=10, freq='T'),
+        'Temperature': np.random.normal(25, 1, 10),
+        'Humidity': np.random.normal(50, 5, 10),
+        'Pressure': np.random.normal(1000, 10, 10),
+    })
+    return render_template("bme280.html", data=data)
+
+@app.route("/mpu6050")
+def mpu6050():
+    # Подставьте реальные данные с MPU6050
+    orientation = {'x': 0.5, 'y': 0.2, 'z': 0.3}
+    data = pd.DataFrame({
+        'Time': pd.date_range(end=pd.Timestamp.now(), periods=10, freq='T'),
+        'AccelX': np.random.normal(0, 0.1, 10),
+        'AccelY': np.random.normal(0, 0.1, 10),
+        'AccelZ': np.random.normal(1, 0.1, 10),
+    })
+    return render_template("mpu6050.html", data=data, orientation=orientation)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+EOF
+
+# 6. Шаблон index.html
+cat > app/templates/index.html <<EOF
+<!DOCTYPE html>
+<html>
+<head><title>Главная</title></head>
+<body>
+  <h1>Выберите датчик</h1>
+  <a href="/bme280"><button>BME280</button></a>
+  <a href="/mpu6050"><button>MPU6050</button></a>
+</body>
+</html>
+EOF
+
+# 7. Шаблон bme280.html
+cat > app/templates/bme280.html <<EOF
+<!DOCTYPE html>
+<html>
+<head><title>BME280</title></head>
+<body>
+  <h2>BME280 — Данные</h2>
+  <div id="graph"></div>
+  {{ data.to_html() }}
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script>
+    let trace1 = {
+      x: {{ data.Time.tolist() | safe }},
+      y: {{ data.Temperature.tolist() | safe }},
+      type: 'scatter',
+      name: 'Temperature'
+    };
+    Plotly.newPlot('graph', [trace1]);
+  </script>
+</body>
+</html>
+EOF
+
+# 8. Шаблон mpu6050.html
+cat > app/templates/mpu6050.html <<EOF
+<!DOCTYPE html>
+<html>
+<head><title>MPU6050</title></head>
+<body>
+  <h2>MPU6050 — Данные и 3D-Куб</h2>
+  <div id="cube" style="width:600px;height:600px;"></div>
+  {{ data.to_html() }}
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script>
+    let cube = {
+      type: 'mesh3d',
+      x: [0,1,1,0,0,1,1,0],
+      y: [0,0,1,1,0,0,1,1],
+      z: [0,0,0,0,1,1,1,1],
+      i: [0,0,0,1,1,2,2,3,4,4,5,6],
+      j: [1,2,3,2,5,3,6,0,5,6,6,7],
+      k: [2,3,1,3,6,6,7,1,6,7,4,4],
+      opacity: 0.5,
+      color: 'blue'
+    };
+    let layout = {
+      title: '3D Orientation Cube (static)',
+      scene: {
+        xaxis: {range: [0,1]},
+        yaxis: {range: [0,1]},
+        zaxis: {range: [0,1]},
+      }
+    };
+    Plotly.newPlot('cube', [cube], layout);
+  </script>
+</body>
+</html>
+EOF
+
+# 9. Создаем systemd unit
+cat > flask_app.service <<EOF
+[Unit]
+Description=Flask Sensor App
+After=network.target
+
+[Service]
+User=$USER
+WorkingDirectory=$(pwd)/app
+Environment="PATH=$(pwd)/venv/bin"
+ExecStart=$(pwd)/venv/bin/python app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "✅ Установка завершена. Запусти Flask вручную: source venv/bin/activate && python app/app.py"
+echo "📦 Или установи systemd unit:"
+echo "sudo cp flask_app.service /etc/systemd/system/"
+echo "sudo systemctl daemon-reexec"
+echo "sudo systemctl enable flask_app"
+echo "sudo systemctl start flask_app"
