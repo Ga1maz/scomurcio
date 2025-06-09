@@ -30,12 +30,11 @@
 - Вставь SD в Raspberry Pi и включи.
 
 Сейчас подробные картики
-
+![Шаг установки Ubuntu Server](images/Screen_4.png)  
 ![Шаг установки Ubuntu Server](images/Screen_0.png)
 ![Шаг установки Ubuntu Server](images/Screen_1.png)  
 ![Шаг установки Ubuntu Server](images/Screen_2.png)  
 ![Шаг установки Ubuntu Server](images/Screen_3.png)  
-![Шаг установки Ubuntu Server](images/Screen_4.png)  
 ![Шаг установки Ubuntu Server](images/Screen_5.png)  
 ![Шаг установки Ubuntu Server](images/Screen_6.png)  
 ![Шаг установки Ubuntu Server](images/Screen_7.png)  
