@@ -1,168 +1,205 @@
 #!/bin/bash
 
-# 1. Создаем виртуальное окружение
-python3 -m venv venv
-source venv/bin/activate
+# Проверка, что скрипт запускается от root
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Этот скрипт нужно запускать от root!"
+  exit 1
+fi
 
-# 2. Устанавливаем зависимости
-pip install flask pandas matplotlib numpy plotly smbus2 mpu6050-raspberrypi bme280
+APP_DIR="/opt/bme280_dashboard"
+VENV_DIR="$APP_DIR/venv"
+SERVICE_FILE="/etc/systemd/system/bme280_dashboard.service"
 
-# 3. Проверка наличия датчиков
-python3 <<EOF
-from smbus2 import SMBus
-import sys
+echo "Создаем директорию приложения: $APP_DIR"
+mkdir -p "$APP_DIR"
+cd "$APP_DIR" || exit 1
 
-bus = SMBus(1)
-def device_exists(address):
-    try:
-        bus.read_byte(address)
-        return True
-    except:
-        return False
+echo "Создаем виртуальное окружение Python"
+python3 -m venv "$VENV_DIR"
 
-bme280_found = device_exists(0x76) or device_exists(0x77)
-mpu6050_found = device_exists(0x68)
+echo "Активируем виртуальное окружение и устанавливаем Flask"
+source "$VENV_DIR/bin/activate"
+pip install --upgrade pip
+pip install flask
 
-if not (bme280_found or mpu6050_found):
-    print("❌ Датчики BME280 и MPU6050 не найдены. Прекращаем запуск.")
-    sys.exit(1)
-EOF
+echo "Создаем файл app.py с Flask приложением..."
 
-# 4. Создаем структуру
-mkdir -p app/templates
-
-# 5. Создаем Flask-приложение
-cat > app/app.py <<EOF
-from flask import Flask, render_template
-import pandas as pd
-import plotly.graph_objs as go
-import numpy as np
+cat > app.py << 'EOF'
+from flask import Flask, Response
+import threading
+import time
+import datetime
+import random
 
 app = Flask(__name__)
 
+data = []
+
+def read_bme280():
+    # Здесь должна быть реальная интеграция с датчиком BME280
+    temperature = 20 + random.uniform(-5, 5)
+    humidity = 50 + random.uniform(-20, 20)
+    pressure = 1000 + random.uniform(-10, 10)
+    return temperature, humidity, pressure
+
+def data_collector():
+    while True:
+        t, h, p = read_bme280()
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        if len(data) >= 100:
+            data.pop(0)
+        data.append({'time': timestamp, 'temp': t, 'humidity': h, 'pressure': p})
+        time.sleep(5)
+
+threading.Thread(target=data_collector, daemon=True).start()
+
 @app.route("/")
 def index():
-    return render_template("index.html")
+    if data:
+        current = data[-1]
+    else:
+        current = {'time': 'N/A', 'temp': 0, 'humidity': 0, 'pressure': 0}
 
-@app.route("/bme280")
-def bme280():
-    # Подставьте сюда реальные данные с BME280
-    data = pd.DataFrame({
-        'Time': pd.date_range(end=pd.Timestamp.now(), periods=10, freq='T'),
-        'Temperature': np.random.normal(25, 1, 10),
-        'Humidity': np.random.normal(50, 5, 10),
-        'Pressure': np.random.normal(1000, 10, 10),
-    })
-    return render_template("bme280.html", data=data)
+    html = f"""
+    <!DOCTYPE html>
+    <html lang='ru'>
+    <head>
+        <meta charset='UTF-8'/>
+        <title>BME280 Dashboard</title>
+        <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
+        <style>
+            body {{ font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; }}
+            h1 {{ text-align: center; }}
+            .current {{ margin-bottom: 20px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            table, th, td {{ border: 1px solid #ccc; }}
+            th, td {{ padding: 8px; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <h1>BME280 Dashboard</h1>
+        <div class='current'>
+            <h2>Текущие показания ({current['time']})</h2>
+            <p>🌡️ Температура: {current['temp']:.2f} °C</p>
+            <p>💧 Влажность: {current['humidity']:.2f} %</p>
+            <p>⏲ Давление: {current['pressure']:.2f} гПа</p>
+        </div>
+        <canvas id='chart' width='800' height='400'></canvas>
+        <table>
+            <thead>
+                <tr><th>Время</th><th>Температура (°C)</th><th>Влажность (%)</th><th>Давление (гПа)</th></tr>
+            </thead>
+            <tbody>
+    """
 
-@app.route("/mpu6050")
-def mpu6050():
-    # Подставьте реальные данные с MPU6050
-    orientation = {'x': 0.5, 'y': 0.2, 'z': 0.3}
-    data = pd.DataFrame({
-        'Time': pd.date_range(end=pd.Timestamp.now(), periods=10, freq='T'),
-        'AccelX': np.random.normal(0, 0.1, 10),
-        'AccelY': np.random.normal(0, 0.1, 10),
-        'AccelZ': np.random.normal(1, 0.1, 10),
-    })
-    return render_template("mpu6050.html", data=data, orientation=orientation)
+    for d in data:
+        html += f"<tr><td>{d['time']}</td><td>{d['temp']:.2f}</td><td>{d['humidity']:.2f}</td><td>{d['pressure']:.2f}</td></tr>"
+
+    html += """
+            </tbody>
+        </table>
+        <script>
+            const times = """ + str([d['time'] for d in data]) + """;
+            const temps = """ + str([d['temp'] for d in data]) + """;
+            const hums = """ + str([d['humidity'] for d in data]) + """;
+            const pres = """ + str([d['pressure'] for d in data]) + """;
+
+            const ctx = document.getElementById('chart').getContext('2d');
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: times,
+                    datasets: [
+                        {
+                            label: 'Температура (°C)',
+                            data: temps,
+                            borderColor: 'rgb(255, 99, 132)',
+                            fill: false,
+                            yAxisID: 'y',
+                        },
+                        {
+                            label: 'Влажность (%)',
+                            data: hums,
+                            borderColor: 'rgb(54, 162, 235)',
+                            fill: false,
+                            yAxisID: 'y1',
+                        },
+                        {
+                            label: 'Давление (гПа)',
+                            data: pres,
+                            borderColor: 'rgb(75, 192, 192)',
+                            fill: false,
+                            yAxisID: 'y2',
+                        }
+                    ]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            position: 'left',
+                            title: { display: true, text: 'Температура (°C)' },
+                        },
+                        y1: {
+                            type: 'linear',
+                            position: 'right',
+                            title: { display: true, text: 'Влажность (%)' },
+                            grid: { drawOnChartArea: false },
+                        },
+                        y2: {
+                            type: 'linear',
+                            position: 'right',
+                            title: { display: true, text: 'Давление (гПа)' },
+                            grid: { drawOnChartArea: false },
+                            offset: true,
+                        },
+                        x: {
+                            title: { display: true, text: 'Время' }
+                        }
+                    },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                }
+            });
+        </script>
+    </body>
+    </html>
+    """
+
+    return Response(html, mimetype='text/html')
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
 EOF
 
-# 6. Шаблон index.html
-cat > app/templates/index.html <<EOF
-<!DOCTYPE html>
-<html>
-<head><title>Главная</title></head>
-<body>
-  <h1>Выберите датчик</h1>
-  <a href="/bme280"><button>BME280</button></a>
-  <a href="/mpu6050"><button>MPU6050</button></a>
-</body>
-</html>
-EOF
+echo "Создаем systemd сервис..."
 
-# 7. Шаблон bme280.html
-cat > app/templates/bme280.html <<EOF
-<!DOCTYPE html>
-<html>
-<head><title>BME280</title></head>
-<body>
-  <h2>BME280 — Данные</h2>
-  <div id="graph"></div>
-  {{ data.to_html() }}
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-  <script>
-    let trace1 = {
-      x: {{ data.Time.tolist() | safe }},
-      y: {{ data.Temperature.tolist() | safe }},
-      type: 'scatter',
-      name: 'Temperature'
-    };
-    Plotly.newPlot('graph', [trace1]);
-  </script>
-</body>
-</html>
-EOF
-
-# 8. Шаблон mpu6050.html
-cat > app/templates/mpu6050.html <<EOF
-<!DOCTYPE html>
-<html>
-<head><title>MPU6050</title></head>
-<body>
-  <h2>MPU6050 — Данные и 3D-Куб</h2>
-  <div id="cube" style="width:600px;height:600px;"></div>
-  {{ data.to_html() }}
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-  <script>
-    let cube = {
-      type: 'mesh3d',
-      x: [0,1,1,0,0,1,1,0],
-      y: [0,0,1,1,0,0,1,1],
-      z: [0,0,0,0,1,1,1,1],
-      i: [0,0,0,1,1,2,2,3,4,4,5,6],
-      j: [1,2,3,2,5,3,6,0,5,6,6,7],
-      k: [2,3,1,3,6,6,7,1,6,7,4,4],
-      opacity: 0.5,
-      color: 'blue'
-    };
-    let layout = {
-      title: '3D Orientation Cube (static)',
-      scene: {
-        xaxis: {range: [0,1]},
-        yaxis: {range: [0,1]},
-        zaxis: {range: [0,1]},
-      }
-    };
-    Plotly.newPlot('cube', [cube], layout);
-  </script>
-</body>
-</html>
-EOF
-
-# 9. Создаем systemd unit
-cat > flask_app.service <<EOF
+cat > "$SERVICE_FILE" << EOF
 [Unit]
-Description=Flask Sensor App
+Description=BME280 Dashboard Flask Server
 After=network.target
 
 [Service]
-User=$USER
-WorkingDirectory=$(pwd)/app
-Environment="PATH=$(pwd)/venv/bin"
-ExecStart=$(pwd)/venv/bin/python app.py
+User=root
+WorkingDirectory=$APP_DIR
+Environment="PATH=$VENV_DIR/bin"
+ExecStart=$VENV_DIR/bin/python3 $APP_DIR/app.py
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-echo "✅ Установка завершена. Запусти Flask вручную: source venv/bin/activate && python app/app.py"
-echo "📦 Или установи systemd unit:"
-echo "sudo cp flask_app.service /etc/systemd/system/"
-echo "sudo systemctl daemon-reexec"
-echo "sudo systemctl enable flask_app"
-echo "sudo systemctl start flask_app"
+echo "Перезагружаем systemd, включаем и запускаем сервис..."
+systemctl daemon-reload
+systemctl enable bme280_dashboard.service
+systemctl restart bme280_dashboard.service
+
+echo "Готово! Flask сервер запущен и добавлен в автозапуск."
+echo "Откройте в браузере http://192.168.3.21:5000/ (замените IP на ваш)"
+
+exit 0
