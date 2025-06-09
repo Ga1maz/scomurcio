@@ -256,32 +256,31 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
 
             // Update table
             const tableBody = document.getElementById('table-body');
-            tableBody.innerHTML = historyData.map(d => 
+            tableBody.innerHTML = historyData.map(d => `
                 <tr>
                     <td>${d.x.toLocaleTimeString()}</td>
                     <td>${d.temp}</td>
                     <td>${d.humidity}</td>
                     <td>${d.pressure}</td>
                 </tr>
-            ).join('');
+            `).join('');
         }
 
         // Fetch data initially and then every 5 seconds
         function fetchData() {
-            fetch('http://'+window.location.hostname+'/api/data')
+            fetch('http://' + window.location.hostname + '/api/data')
                 .then(response => response.json())
                 .then(data => {
                     updateCurrentReadings(data);
                     updateCharts(data);
                 })
-                .catch(error => console.error('Error fetching data:', error));
+                .catch(err => console.error('Ошибка получения данных:', err));
         }
-
-        // Initial fetch
+        
+        // Запуск и интервал
         fetchData();
-
-        // Set up periodic updates
         setInterval(fetchData, 5000);
+
     </script>
 </body>
 </html>
