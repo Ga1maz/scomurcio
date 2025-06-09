@@ -8,6 +8,25 @@ echo -e "\033[34m____   ____ ___  __  __   _   _ ____   ____ ___  ___
  |____/ \____\___/|_|  |_|  \___/|_| \_\____|___|\___/
              \033[31m🚀 СКРИПТ ОТ GA1MAZ.RU\033[0m"
 
+# Выводим схему подключения желтым цветом
+echo -e "\n\033[33m"
+cat << "EOF"
+          Схема подключения BME280 к Raspberry Pi:
+          -----------------------------------
+          | BME280 Pin | Raspberry Pi Pin  |
+          |------------|-------------------|
+          |   VCC      |     3.3V (1)      |
+          |   GND      |     GND (6)       |
+          |   SDA      |     GPIO2 (3)     |
+          |   SCL      |     GPIO3 (5)     |
+          -----------------------------------
+          Примечание: Адрес I2C по умолчанию: 0x76
+EOF
+echo -e "\033[0m"
+
+# Выводим предупреждение о бета-тестировании
+echo -e "\n\033[33mБэта тестирование (сейчас доступно только BME280, NPU6050 (Скоро добавим), Энкодер (Скоро добавим))\033[0m\n"
+
 # Спрашиваем о подключении
 read -p "Вы подключили датчик BME280 к Raspberry Pi? (y/n): " connected
 if [ "$connected" != "y" ]; then
@@ -179,7 +198,7 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
                 type: 'line',
                 data: {
                     datasets: [{
-                        label: `${label} (${unit})`,
+                        label: ${label} (${unit}),
                         backgroundColor: bgColor,
                         borderColor: borderColor,
                         borderWidth: 1,
@@ -206,9 +225,9 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
         }
 
         function updateCurrentReadings(data) {
-            document.getElementById('current-temp').textContent = `${data.temperature} °C`;
-            document.getElementById('current-humidity').textContent = `${data.humidity} %`;
-            document.getElementById('current-pressure').textContent = `${data.pressure} hPa`;
+            document.getElementById('current-temp').textContent = ${data.temperature} °C;
+            document.getElementById('current-humidity').textContent = ${data.humidity} %;
+            document.getElementById('current-pressure').textContent = ${data.pressure} hPa;
         }
 
         function updateCharts(data) {
@@ -237,14 +256,14 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOL'
 
             // Update table
             const tableBody = document.getElementById('table-body');
-            tableBody.innerHTML = historyData.map(d => `
+            tableBody.innerHTML = historyData.map(d => 
                 <tr>
                     <td>${d.x.toLocaleTimeString()}</td>
                     <td>${d.temp}</td>
                     <td>${d.humidity}</td>
                     <td>${d.pressure}</td>
                 </tr>
-            `).join('');
+            ).join('');
         }
 
         // Fetch data initially and then every 5 seconds
@@ -283,9 +302,9 @@ server {
 
     location /api {
         proxy_pass http://127.0.0.1:5000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
 
         # Добавляем CORS заголовки
         add_header 'Access-Control-Allow-Origin' '*';
@@ -295,9 +314,9 @@ server {
 
     location = /api/data {
         proxy_pass http://127.0.0.1:5000/api/data;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 }
 EOL
@@ -307,4 +326,5 @@ sudo nginx -t
 sudo systemctl restart nginx
 
 echo -e "\n\033[32mУстановка завершена!\033[0m"
+echo -e "\n\033[33mASCII сайт с BME280 расположен на:\033[0m"
 echo "Вы можете открыть веб-интерфейс по адресу: http://$server_ip"
