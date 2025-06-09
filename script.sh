@@ -21,6 +21,7 @@ echo "Активируем виртуальное окружение и уста
 source "$VENV_DIR/bin/activate"
 pip install --upgrade pip
 pip install flask
+pip install adafruit-circuitpython-bme280
 
 echo "Создаем файл app.py с Flask приложением..."
 
@@ -30,16 +31,22 @@ import threading
 import time
 import datetime
 import random
+import board
+import busio
+import adafruit_bme280
 
 app = Flask(__name__)
 
 data = []
 
+i2c = busio.I2C(board.SCL, board.SDA)
+bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c)
+
+
 def read_bme280():
-    # Здесь должна быть реальная интеграция с датчиком BME280
-    temperature = 20 + random.uniform(-5, 5)
-    humidity = 50 + random.uniform(-20, 20)
-    pressure = 1000 + random.uniform(-10, 10)
+    temperature = bme280.temperature
+    humidity = bme280.relative_humidity
+    pressure = bme280.pressure
     return temperature, humidity, pressure
 
 def data_collector():
