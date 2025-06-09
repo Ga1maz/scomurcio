@@ -325,5 +325,5 @@ sudo nginx -t
 sudo systemctl restart nginx
 
 echo -e "\n\033[32mУстановка завершена!\033[0m"
-echo -e "\n\033[33mASCII сайт с BME280 расположен на:\033[0m"
+echo -e "\n\033[33mNGINX сайт с BME280 расположен на:\033[0m"
 echo "Вы можете открыть веб-интерфейс по адресу: http://$server_ip"
