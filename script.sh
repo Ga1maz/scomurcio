@@ -274,17 +274,30 @@ server_ip=$(hostname -I | awk '{print $1}')
 sudo tee /etc/nginx/sites-available/default > /dev/null <<EOL
 server {
     listen 80;
-    server_name $server_ip;
+    server_name 192.168.3.21;
 
     location / {
         root /var/www/html;
         index index.html;
     }
 
-    location /api/ {
-        proxy_pass http://localhost:5000/;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
+    location /api {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        # Добавляем CORS заголовки
+        add_header 'Access-Control-Allow-Origin' '*';
+        add_header 'Access-Control-Allow-Methods' 'GET, OPTIONS';
+        add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range';
+    }
+
+    location = /api/data {
+        proxy_pass http://127.0.0.1:5000/api/data;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 }
 EOL
