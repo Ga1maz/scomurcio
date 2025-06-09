@@ -1,212 +1,297 @@
 #!/bin/bash
 
-# Проверка, что скрипт запускается от root
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Этот скрипт нужно запускать от root!"
-  exit 1
+# Выводим ASCII-арт
+echo -e "\033[34m____   ____ ___  __  __   _   _ ____   ____ ___  ___
+ / ___| / ___/ _ \|  \/  | | | | |  _ \ / ___|_ _|/ _ \\
+ \___ \| |  | | | | |\/| | | | | | |_) | |    | | | | | |
+  ___) | |__| |_| | |  | | | |_| |  _ <| |___ | | | |_| |
+ |____/ \____\___/|_|  |_|  \___/|_| \_\____|___|\___/
+             \033[31m🚀 СКРИПТ ОТ GA1MAZ.RU\033[0m"
+
+# Спрашиваем о подключении
+read -p "Вы подключили датчик BME280 к Raspberry Pi? (y/n): " connected
+if [ "$connected" != "y" ]; then
+    echo "Пожалуйста, подключите датчик BME280 и запустите скрипт снова."
+    exit 1
 fi
 
-APP_DIR="/opt/bme280_dashboard"
-VENV_DIR="$APP_DIR/venv"
-SERVICE_FILE="/etc/systemd/system/bme280_dashboard.service"
+# Установка пакетов
+echo -e "\n\033[32mУстанавливаем необходимые пакеты...\033[0m"
+sudo apt update
+sudo apt install -y i2c-tools python3-smbus python3-pip nginx
+sudo pip3 install --break-system-packages RPi.bme280 smbus2 flask flask-cors
 
-echo "Создаем директорию приложения: $APP_DIR"
-mkdir -p "$APP_DIR"
-cd "$APP_DIR" || exit 1
+# Создание Python скрипта
+echo -e "\n\033[32mСоздаем скрипт для чтения данных BME280...\033[0m"
+sudo tee /usr/local/bin/bme280_api.py > /dev/null <<'EOL'
+#!/usr/bin/env python3
 
-echo "Создаем виртуальное окружение Python"
-python3 -m venv "$VENV_DIR"
-
-echo "Активируем виртуальное окружение и устанавливаем Flask"
-source "$VENV_DIR/bin/activate"
-pip install --upgrade pip
-pip install flask
-pip install adafruit-circuitpython-bme280
-
-echo "Создаем файл app.py с Flask приложением..."
-
-cat > app.py << 'EOF'
-from flask import Flask, Response
-import threading
-import time
-import datetime
-import random
-import board
-import busio
-import adafruit_bme280
+from flask import Flask, jsonify
+import smbus2
+import bme280
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)  # Разрешаем запросы со всех доменов
 
-data = []
+port = 1
+address = 0x76
+bus = smbus2.SMBus(port)
+calibration_params = bme280.load_calibration_params(bus, address)
 
-i2c = busio.I2C(board.SCL, board.SDA)
-bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c)
+@app.route('/api/data')
+def get_data():
+    data = bme280.sample(bus, address, calibration_params)
+    return jsonify({
+        'temperature': round(data.temperature, 1),
+        'humidity': round(data.humidity, 1),
+        'pressure': round(data.pressure, 1),
+        'timestamp': data.timestamp.isoformat()
+    })
 
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+EOL
 
-def read_bme280():
-    temperature = bme280.temperature
-    humidity = bme280.relative_humidity
-    pressure = bme280.pressure
-    return temperature, humidity, pressure
+# Даем права на выполнение
+sudo chmod +x /usr/local/bin/bme280_api.py
 
-def data_collector():
-    while True:
-        t, h, p = read_bme280()
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        if len(data) >= 100:
-            data.pop(0)
-        data.append({'time': timestamp, 'temp': t, 'humidity': h, 'pressure': p})
-        time.sleep(5)
-
-threading.Thread(target=data_collector, daemon=True).start()
-
-@app.route("/")
-def index():
-    if data:
-        current = data[-1]
-    else:
-        current = {'time': 'N/A', 'temp': 0, 'humidity': 0, 'pressure': 0}
-
-    html = f"""
-    <!DOCTYPE html>
-    <html lang='ru'>
-    <head>
-        <meta charset='UTF-8'/>
-        <title>BME280 Dashboard</title>
-        <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
-        <style>
-            body {{ font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; }}
-            h1 {{ text-align: center; }}
-            .current {{ margin-bottom: 20px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            table, th, td {{ border: 1px solid #ccc; }}
-            th, td {{ padding: 8px; text-align: center; }}
-        </style>
-    </head>
-    <body>
-        <h1>BME280 Dashboard</h1>
-        <div class='current'>
-            <h2>Текущие показания ({current['time']})</h2>
-            <p>🌡️ Температура: {current['temp']:.2f} °C</p>
-            <p>💧 Влажность: {current['humidity']:.2f} %</p>
-            <p>⏲ Давление: {current['pressure']:.2f} гПа</p>
-        </div>
-        <canvas id='chart' width='800' height='400'></canvas>
-        <table>
-            <thead>
-                <tr><th>Время</th><th>Температура (°C)</th><th>Влажность (%)</th><th>Давление (гПа)</th></tr>
-            </thead>
-            <tbody>
-    """
-
-    for d in data:
-        html += f"<tr><td>{d['time']}</td><td>{d['temp']:.2f}</td><td>{d['humidity']:.2f}</td><td>{d['pressure']:.2f}</td></tr>"
-
-    html += """
-            </tbody>
-        </table>
-        <script>
-            const times = """ + str([d['time'] for d in data]) + """;
-            const temps = """ + str([d['temp'] for d in data]) + """;
-            const hums = """ + str([d['humidity'] for d in data]) + """;
-            const pres = """ + str([d['pressure'] for d in data]) + """;
-
-            const ctx = document.getElementById('chart').getContext('2d');
-            const chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: times,
-                    datasets: [
-                        {
-                            label: 'Температура (°C)',
-                            data: temps,
-                            borderColor: 'rgb(255, 99, 132)',
-                            fill: false,
-                            yAxisID: 'y',
-                        },
-                        {
-                            label: 'Влажность (%)',
-                            data: hums,
-                            borderColor: 'rgb(54, 162, 235)',
-                            fill: false,
-                            yAxisID: 'y1',
-                        },
-                        {
-                            label: 'Давление (гПа)',
-                            data: pres,
-                            borderColor: 'rgb(75, 192, 192)',
-                            fill: false,
-                            yAxisID: 'y2',
-                        }
-                    ]
-                },
-                options: {
-                    scales: {
-                        y: {
-                            type: 'linear',
-                            position: 'left',
-                            title: { display: true, text: 'Температура (°C)' },
-                        },
-                        y1: {
-                            type: 'linear',
-                            position: 'right',
-                            title: { display: true, text: 'Влажность (%)' },
-                            grid: { drawOnChartArea: false },
-                        },
-                        y2: {
-                            type: 'linear',
-                            position: 'right',
-                            title: { display: true, text: 'Давление (гПа)' },
-                            grid: { drawOnChartArea: false },
-                            offset: true,
-                        },
-                        x: {
-                            title: { display: true, text: 'Время' }
-                        }
-                    },
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    responsive: true,
-                    maintainAspectRatio: false,
-                }
-            });
-        </script>
-    </body>
-    </html>
-    """
-
-    return Response(html, mimetype='text/html')
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-EOF
-
-echo "Создаем systemd сервис..."
-
-cat > "$SERVICE_FILE" << EOF
+# Создаем службу systemd
+echo -e "\n\033[32mСоздаем службу systemd для автозапуска...\033[0m"
+sudo tee /etc/systemd/system/bme280_api.service > /dev/null <<'EOL'
 [Unit]
-Description=BME280 Dashboard Flask Server
+Description=BME280 API Service
 After=network.target
 
 [Service]
-User=root
-WorkingDirectory=$APP_DIR
-Environment="PATH=$VENV_DIR/bin"
-ExecStart=$VENV_DIR/bin/python3 $APP_DIR/app.py
+ExecStart=/usr/local/bin/bme280_api.py
+WorkingDirectory=/usr/local/bin
+StandardOutput=inherit
+StandardError=inherit
 Restart=always
+User=root
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOL
 
-echo "Перезагружаем systemd, включаем и запускаем сервис..."
-systemctl daemon-reload
-systemctl enable bme280_dashboard.service
-systemctl restart bme280_dashboard.service
+# Включаем и запускаем службу
+sudo systemctl daemon-reload
+sudo systemctl enable bme280_api.service
+sudo systemctl start bme280_api.service
 
-echo "Готово! Flask сервер запущен и добавлен в автозапуск."
-echo "Откройте в браузере http://192.168.3.21:5000/ (замените IP на ваш)"
+# Создаем веб-страницу
+echo -e "\n\033[32mСоздаем веб-интерфейс...\033[0m"
+sudo tee /var/www/html/index.html > /dev/null <<'EOL'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BME280 Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .chart-container { position: relative; height: 300px; margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+        .current-data { background: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        .data-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .data-card { background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .data-card h3 { margin-top: 0; color: #555; }
+        .data-value { font-size: 24px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>BME280 Environmental Monitor</h1>
+    
+    <div class="current-data">
+        <h2>Current Readings</h2>
+        <div class="data-grid">
+            <div class="data-card">
+                <h3>Temperature</h3>
+                <div class="data-value" id="current-temp">-- °C</div>
+            </div>
+            <div class="data-card">
+                <h3>Humidity</h3>
+                <div class="data-value" id="current-humidity">-- %</div>
+            </div>
+            <div class="data-card">
+                <h3>Pressure</h3>
+                <div class="data-value" id="current-pressure">-- hPa</div>
+            </div>
+        </div>
+    </div>
 
-exit 0
+    <div class="dashboard">
+        <div>
+            <h2>Temperature History</h2>
+            <div class="chart-container">
+                <canvas id="tempChart"></canvas>
+            </div>
+        </div>
+        <div>
+            <h2>Humidity History</h2>
+            <div class="chart-container">
+                <canvas id="humidityChart"></canvas>
+            </div>
+        </div>
+        <div>
+            <h2>Pressure History</h2>
+            <div class="chart-container">
+                <canvas id="pressureChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <h2>Recent Readings</h2>
+    <table id="readings-table">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Temperature (°C)</th>
+                <th>Humidity (%)</th>
+                <th>Pressure (hPa)</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+            <!-- Data will be inserted here -->
+        </tbody>
+    </table>
+
+    <script>
+        // Store historical data
+        let historyData = [];
+        const maxHistory = 50;
+
+        // Chart instances
+        const tempChart = createChart('tempChart', 'Temperature', '°C', 'rgba(255, 99, 132, 0.2)', 'rgb(255, 99, 132)');
+        const humidityChart = createChart('humidityChart', 'Humidity', '%', 'rgba(54, 162, 235, 0.2)', 'rgb(54, 162, 235)');
+        const pressureChart = createChart('pressureChart', 'Pressure', 'hPa', 'rgba(75, 192, 192, 0.2)', 'rgb(75, 192, 192)');
+
+        function createChart(canvasId, label, unit, bgColor, borderColor) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: `${label} (${unit})`,
+                        backgroundColor: bgColor,
+                        borderColor: borderColor,
+                        borderWidth: 1,
+                        pointRadius: 2,
+                        data: []
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'minute'
+                            }
+                        },
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCurrentReadings(data) {
+            document.getElementById('current-temp').textContent = `${data.temperature} °C`;
+            document.getElementById('current-humidity').textContent = `${data.humidity} %`;
+            document.getElementById('current-pressure').textContent = `${data.pressure} hPa`;
+        }
+
+        function updateCharts(data) {
+            const timestamp = new Date(data.timestamp);
+            
+            // Add to history (limit to maxHistory entries)
+            historyData.unshift({
+                x: timestamp,
+                temp: data.temperature,
+                humidity: data.humidity,
+                pressure: data.pressure
+            });
+            
+            if (historyData.length > maxHistory) {
+                historyData.pop();
+            }
+
+            // Update charts
+            tempChart.data.datasets[0].data = historyData.map(d => ({x: d.x, y: d.temp}));
+            humidityChart.data.datasets[0].data = historyData.map(d => ({x: d.x, y: d.humidity}));
+            pressureChart.data.datasets[0].data = historyData.map(d => ({x: d.x, y: d.pressure}));
+            
+            tempChart.update();
+            humidityChart.update();
+            pressureChart.update();
+
+            // Update table
+            const tableBody = document.getElementById('table-body');
+            tableBody.innerHTML = historyData.map(d => `
+                <tr>
+                    <td>${d.x.toLocaleTimeString()}</td>
+                    <td>${d.temp}</td>
+                    <td>${d.humidity}</td>
+                    <td>${d.pressure}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Fetch data initially and then every 5 seconds
+        function fetchData() {
+            fetch('http://'+window.location.hostname+'/api/data')
+                .then(response => response.json())
+                .then(data => {
+                    updateCurrentReadings(data);
+                    updateCharts(data);
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }
+
+        // Initial fetch
+        fetchData();
+
+        // Set up periodic updates
+        setInterval(fetchData, 5000);
+    </script>
+</body>
+</html>
+EOL
+
+# Настраиваем Nginx
+echo -e "\n\033[32mНастраиваем Nginx...\033[0m"
+server_ip=$(hostname -I | awk '{print $1}')
+sudo tee /etc/nginx/sites-available/default > /dev/null <<EOL
+server {
+    listen 80;
+    server_name $server_ip;
+
+    location / {
+        root /var/www/html;
+        index index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://localhost:5000/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+}
+EOL
+
+# Проверяем и перезапускаем Nginx
+sudo nginx -t
+sudo systemctl restart nginx
+
+echo -e "\n\033[32mУстановка завершена!\033[0m"
+echo "Вы можете открыть веб-интерфейс по адресу: http://$server_ip"
